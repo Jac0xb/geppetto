@@ -93,16 +93,16 @@ pub trait AccountValidation {
 }
 
 pub trait AccountInfoValidation {
-    fn is_signer(&self) -> Result<&Self, ProgramError>;
-    fn is_writable(&self) -> Result<&Self, ProgramError>;
-    fn is_executable(&self) -> Result<&Self, ProgramError>;
-    fn is_empty(&self) -> Result<&Self, ProgramError>;
-    fn is_type<T: Discriminator>(&self, program_id: &Pubkey) -> Result<&Self, ProgramError>;
-    fn is_program(&self, program_id: &Pubkey) -> Result<&Self, ProgramError>;
+    fn assert_signer(&self) -> Result<&Self, ProgramError>;
+    fn assert_writable(&self) -> Result<&Self, ProgramError>;
+    fn assert_executable(&self) -> Result<&Self, ProgramError>;
+    fn assert_empty(&self) -> Result<&Self, ProgramError>;
+    fn assert_type<T: Discriminator>(&self, program_id: &Pubkey) -> Result<&Self, ProgramError>;
+    fn assert_program(&self, program_id: &Pubkey) -> Result<&Self, ProgramError>;
     // fn is_sysvar(&self, sysvar_id: &Pubkey) -> Result<&Self, ProgramError>;
-    fn has_address(&self, address: &Pubkey) -> Result<&Self, ProgramError>;
-    fn has_owner(&self, program_id: &Pubkey) -> Result<&Self, ProgramError>;
-    fn has_seeds(&self, seeds: &[&[u8]], program_id: &Pubkey) -> Result<&Self, ProgramError>;
+    fn assert_address(&self, address: &Pubkey) -> Result<&Self, ProgramError>;
+    fn assert_owner(&self, program_id: &Pubkey) -> Result<&Self, ProgramError>;
+    fn assert_seeds(&self, seeds: &[&[u8]], program_id: &Pubkey) -> Result<&Self, ProgramError>;
 }
 
 pub trait Discriminator {
