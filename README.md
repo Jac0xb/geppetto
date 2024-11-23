@@ -1,4 +1,24 @@
-# 🏗️ Geppetto
+<h1 align="center">
+  <code>geppetto</code>
+</h1>
+<p align="center">
+  <img width="400" alt="Limestone" src="https://github.com/user-attachments/assets/ad252ff4-cbad-40d4-967d-31f07fc5b893" />
+</p>
+<p align="center">
+  Create steel-esq Solana programs with one dependencies attached (pinocchio).
+</p>
+
+<p align="right">
+<i>I've got strings to offer thee</i><br />
+<i>My wooden son</i><br />
+<i>To guide your way</i><br />
+<i>Till day is done</i><br />
+<i>These loving strings</i><br />
+<i>Will set you free</i><br />
+<i>Until you need no strings from me</i>
+</p>
+
+## Overview
 
 **Steel is a new Solana smart contract framework.** It provides a library of helper functions, macros, and code patterns for building safe and maintainable smart contracts on the Solana blockchain.
 
