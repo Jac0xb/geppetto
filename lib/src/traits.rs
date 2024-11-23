@@ -97,6 +97,7 @@ pub trait AccountInfoValidation {
     fn assert_writable(&self) -> Result<&Self, ProgramError>;
     fn assert_executable(&self) -> Result<&Self, ProgramError>;
     fn assert_empty(&self) -> Result<&Self, ProgramError>;
+    fn assert_not_empty(&self) -> Result<&Self, ProgramError>;
     fn assert_type<T: Discriminator>(&self, program_id: &Pubkey) -> Result<&Self, ProgramError>;
     fn assert_program(&self, program_id: &Pubkey) -> Result<&Self, ProgramError>;
     // fn is_sysvar(&self, sysvar_id: &Pubkey) -> Result<&Self, ProgramError>;

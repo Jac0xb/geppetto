@@ -44,6 +44,13 @@ impl AccountInfoValidation for AccountInfo {
         Ok(self)
     }
 
+    fn assert_not_empty(&self) -> Result<&Self, ProgramError> {
+        if self.data_is_empty() {
+            return Err(ProgramError::AccountAlreadyInitialized);
+        }
+        Ok(self)
+    }
+
     fn assert_program(&self, program_id: &Pubkey) -> Result<&Self, ProgramError> {
         self.assert_key(program_id)?.assert_executable()
     }
