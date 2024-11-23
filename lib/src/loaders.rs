@@ -1,11 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use bytemuck::Pod;
 use pinocchio::{
     account_info::AccountInfo,
     msg,
     program_error::ProgramError,
     pubkey::{self, find_program_address, Pubkey},
-    syscalls::sol_log_pubkey,
 };
 use pinocchio_system::instructions::Transfer;
 #[cfg(feature = "spl")]
