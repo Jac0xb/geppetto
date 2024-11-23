@@ -1,4 +1,4 @@
-# 🏗️ Steel 
+# 🏗️ Geppetto
 
 **Steel is a new Solana smart contract framework.** It provides a library of helper functions, macros, and code patterns for building safe and maintainable smart contracts on the Solana blockchain.
 
@@ -23,28 +23,32 @@
 ## Get started
 
 Install the Steel CLI:
+
 ```sh
 cargo install steel-cli
 ```
 
 Use the `new` command to create a new project:
+
 ```sh
 steel new my-project
 ```
 
 Compile your program using the Solana toolchain:
+
 ```sh
 steel build
 ```
 
 Test your program using the Solana toolchain:
+
 ```sh
 steel test
 ```
 
 ## File structure
 
-While not strictly enforced, we recommend organizing your Solana program with the following file structure. We have found this pattern to improve code readability, separating the contract interface from its implementation. It scales well for complex contracts. 
+While not strictly enforced, we recommend organizing your Solana program with the following file structure. We have found this pattern to improve code readability, separating the contract interface from its implementation. It scales well for complex contracts.
 
 ```
 Cargo.toml (workspace)
@@ -214,7 +218,7 @@ pub fn process_add(accounts: &[AccountInfo<'_>], _data: &[u8]) -> ProgramResult 
     signer_info.is_signer()?;
 
     let counter = counter_info
-        .as_account_mut::<Counter>(&example_api::ID)? 
+        .as_account_mut::<Counter>(&example_api::ID)?
         .assert_mut(|c| c.value <= 42)?;
 
     counter.value += 1;

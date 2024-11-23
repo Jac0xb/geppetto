@@ -1,7 +1,12 @@
 use bytemuck::Pod;
+use pinocchio::{
+    account_info::AccountInfo,
+    program_error::ProgramError,
+    pubkey::{find_program_address, Pubkey},
+};
+use pinocchio_system::instructions::Transfer;
 #[cfg(feature = "spl")]
 use solana_program::program_pack::Pack;
-use solana_program::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey};
 
 use crate::{
     AccountDeserialize, AccountInfoValidation, AsAccount, CloseAccount, Discriminator,
@@ -10,23 +15,23 @@ use crate::{
 #[cfg(feature = "spl")]
 use crate::{AccountValidation, AsSplToken};
 
-impl AccountInfoValidation for AccountInfo<'_> {
+impl AccountInfoValidation for AccountInfo {
     fn is_signer(&self) -> Result<&Self, ProgramError> {
-        if !self.is_signer {
+        if !self.is_signer() {
             return Err(ProgramError::MissingRequiredSignature);
         }
         Ok(self)
     }
 
     fn is_writable(&self) -> Result<&Self, ProgramError> {
-        if !self.is_writable {
+        if !self.is_writable() {
             return Err(ProgramError::MissingRequiredSignature);
         }
         Ok(self)
     }
 
     fn is_executable(&self) -> Result<&Self, ProgramError> {
-        if !self.executable {
+        if !self.executable() {
             return Err(ProgramError::InvalidAccountData);
         }
         Ok(self)
@@ -52,34 +57,34 @@ impl AccountInfoValidation for AccountInfo<'_> {
     }
 
     fn has_owner(&self, owner: &Pubkey) -> Result<&Self, ProgramError> {
-        if self.owner.ne(owner) {
+        if self.owner().ne(owner) {
             return Err(ProgramError::InvalidAccountOwner);
         }
         Ok(self)
     }
 
     fn has_address(&self, address: &Pubkey) -> Result<&Self, ProgramError> {
-        if self.key.ne(&address) {
+        if self.key().ne(address) {
             return Err(ProgramError::InvalidAccountData);
         }
         Ok(self)
     }
 
     fn has_seeds(&self, seeds: &[&[u8]], program_id: &Pubkey) -> Result<&Self, ProgramError> {
-        let pda = Pubkey::find_program_address(seeds, program_id);
-        if self.key.ne(&pda.0) {
+        let pda = find_program_address(seeds, program_id);
+        if self.key().ne(&pda.0) {
             return Err(ProgramError::InvalidSeeds);
         }
         Ok(self)
     }
 
-    fn is_sysvar(&self, sysvar_id: &Pubkey) -> Result<&Self, ProgramError> {
-        self.has_owner(&solana_program::sysvar::ID)?
-            .has_address(sysvar_id)
-    }
+    // fn is_sysvar(&self, sysvar_id: &Pubkey) -> Result<&Self, ProgramError> {
+    // self.has_owner(&pinocchio::sysvars::ID)?
+    //     .has_address(sysvar_id)
+    // }
 }
 
-impl AsAccount for AccountInfo<'_> {
+impl AsAccount for AccountInfo {
     fn as_account<T>(&self, program_id: &Pubkey) -> Result<&T, ProgramError>
     where
         T: AccountDeserialize + Discriminator + Pod,
@@ -107,24 +112,28 @@ impl AsAccount for AccountInfo<'_> {
     }
 }
 
-impl<'a, 'info> LamportTransfer<'a, 'info> for AccountInfo<'info> {
+impl<'a> LamportTransfer<'a> for AccountInfo {
+    // TODO: This way of transfer is non-standard and doesn't show up in explorers.
     #[inline(always)]
-    fn send(&'a self, lamports: u64, to: &'a AccountInfo<'info>) {
-        **self.lamports.borrow_mut() -= lamports;
-        **to.lamports.borrow_mut() += lamports;
+    fn send(&'a self, lamports: u64, to: &'a AccountInfo) -> Result<(), ProgramError> {
+        *self.try_borrow_mut_lamports()? -= lamports;
+        *to.try_borrow_mut_lamports()? += lamports;
+        Ok(())
     }
 
     #[inline(always)]
-    fn collect(&'a self, lamports: u64, from: &'a AccountInfo<'info>) -> Result<(), ProgramError> {
-        solana_program::program::invoke(
-            &solana_program::system_instruction::transfer(from.key, self.key, lamports),
-            &[from.clone(), self.clone()],
-        )
+    fn collect(&'a self, lamports: u64, from: &'a AccountInfo) -> Result<(), ProgramError> {
+        Transfer {
+            from,
+            to: self,
+            lamports,
+        }
+        .invoke()
     }
 }
 
-impl<'a, 'info> CloseAccount<'a, 'info> for AccountInfo<'info> {
-    fn close(&'a self, to: &'a AccountInfo<'info>) -> Result<(), ProgramError> {
+impl<'a> CloseAccount<'a> for AccountInfo {
+    fn close(&'a self, to: &'a AccountInfo) -> Result<(), ProgramError> {
         // Realloc data to zero.
         self.realloc(0, true)?;
 

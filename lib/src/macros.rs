@@ -1,44 +1,14 @@
 #[macro_export]
-macro_rules! impl_to_bytes {
-    ($struct_name:ident) => {
-        impl $struct_name {
-            pub fn to_bytes(&self) -> &[u8] {
-                bytemuck::bytes_of(self)
-            }
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! impl_from_bytes {
-    ($struct_name:ident) => {
-        impl $struct_name {
-            pub fn from_bytes(data: &[u8]) -> &Self {
-                bytemuck::from_bytes::<Self>(data)
-            }
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! impl_instruction_from_bytes {
-    ($struct_name:ident) => {
-        impl $struct_name {
-            pub fn try_from_bytes(
-                data: &[u8],
-            ) -> Result<&Self, solana_program::program_error::ProgramError> {
-                bytemuck::try_from_bytes::<Self>(data).or(Err(
-                    solana_program::program_error::ProgramError::InvalidInstructionData,
-                ))
-            }
-        }
-    };
-}
-
-#[macro_export]
 macro_rules! account {
     ($discriminator_name:ident, $struct_name:ident) => {
-        $crate::impl_to_bytes!($struct_name);
+        impl $struct_name
+        where
+            Self: borsh::BorshSerialize,
+        {
+            pub fn to_bytes(&self) -> Vec<u8> {
+                borsh::to_vec(self).unwrap()
+            }
+        }
 
         impl $crate::Discriminator for $struct_name {
             fn discriminator() -> u8 {
@@ -50,12 +20,12 @@ macro_rules! account {
             fn assert<F>(
                 &self,
                 condition: F,
-            ) -> Result<&Self, solana_program::program_error::ProgramError>
+            ) -> Result<&Self, pinocchio::program_error::ProgramError>
             where
                 F: Fn(&Self) -> bool,
             {
                 if !condition(self) {
-                    return Err(solana_program::program_error::ProgramError::InvalidAccountData);
+                    return Err(pinocchio::program_error::ProgramError::InvalidAccountData);
                 }
                 Ok(self)
             }
@@ -63,8 +33,8 @@ macro_rules! account {
             fn assert_err<F>(
                 &self,
                 condition: F,
-                err: solana_program::program_error::ProgramError,
-            ) -> Result<&Self, solana_program::program_error::ProgramError>
+                err: pinocchio::program_error::ProgramError,
+            ) -> Result<&Self, pinocchio::program_error::ProgramError>
             where
                 F: Fn(&Self) -> bool,
             {
@@ -78,13 +48,13 @@ macro_rules! account {
                 &self,
                 condition: F,
                 msg: &str,
-            ) -> Result<&Self, solana_program::program_error::ProgramError>
+            ) -> Result<&Self, pinocchio::program_error::ProgramError>
             where
                 F: Fn(&Self) -> bool,
             {
                 match $crate::assert(
                     condition(self),
-                    solana_program::program_error::ProgramError::InvalidAccountData,
+                    pinocchio::program_error::ProgramError::InvalidAccountData,
                     msg,
                 ) {
                     Err(err) => Err(err.into()),
@@ -95,12 +65,12 @@ macro_rules! account {
             fn assert_mut<F>(
                 &mut self,
                 condition: F,
-            ) -> Result<&mut Self, solana_program::program_error::ProgramError>
+            ) -> Result<&mut Self, pinocchio::program_error::ProgramError>
             where
                 F: Fn(&Self) -> bool,
             {
                 if !condition(self) {
-                    return Err(solana_program::program_error::ProgramError::InvalidAccountData);
+                    return Err(pinocchio::program_error::ProgramError::InvalidAccountData);
                 }
                 Ok(self)
             }
@@ -108,8 +78,8 @@ macro_rules! account {
             fn assert_mut_err<F>(
                 &mut self,
                 condition: F,
-                err: solana_program::program_error::ProgramError,
-            ) -> Result<&mut Self, solana_program::program_error::ProgramError>
+                err: pinocchio::program_error::ProgramError,
+            ) -> Result<&mut Self, pinocchio::program_error::ProgramError>
             where
                 F: Fn(&Self) -> bool,
             {
@@ -123,13 +93,13 @@ macro_rules! account {
                 &mut self,
                 condition: F,
                 msg: &str,
-            ) -> Result<&mut Self, solana_program::program_error::ProgramError>
+            ) -> Result<&mut Self, pinocchio::program_error::ProgramError>
             where
                 F: Fn(&Self) -> bool,
             {
                 match $crate::assert(
                     condition(self),
-                    solana_program::program_error::ProgramError::InvalidAccountData,
+                    pinocchio::program_error::ProgramError::InvalidAccountData,
                     msg,
                 ) {
                     Err(err) => Err(err.into()),
@@ -143,9 +113,9 @@ macro_rules! account {
 #[macro_export]
 macro_rules! error {
     ($struct_name:ident) => {
-        impl From<$struct_name> for solana_program::program_error::ProgramError {
+        impl From<$struct_name> for pinocchio::program_error::ProgramError {
             fn from(e: $struct_name) -> Self {
-                solana_program::program_error::ProgramError::Custom(e as u32)
+                pinocchio::program_error::ProgramError::Custom(e as u32)
             }
         }
     };
@@ -154,23 +124,29 @@ macro_rules! error {
 #[macro_export]
 macro_rules! event {
     ($struct_name:ident) => {
-        $crate::impl_to_bytes!($struct_name);
-        $crate::impl_from_bytes!($struct_name);
+        impl $struct_name
+        where
+            Self: borsh::BorshSerialize,
+        {
+            pub fn to_bytes(&self) -> Vec<u8> {
+                borsh::to_vec(self).unwrap()
+            }
+        }
 
         impl $crate::Loggable for $struct_name {
             fn log(&self) {
-                solana_program::log::sol_log_data(&[self.to_bytes()]);
+                pinocchio::log::sol_log_data(&[self.to_bytes().as_slice()]);
             }
 
             fn log_return(&self) {
-                solana_program::program::set_return_data(self.to_bytes());
+                pinocchio::program::set_return_data(self.to_bytes().as_slice());
             }
         }
     };
 }
 
 #[macro_export]
-macro_rules! instruction {
+macro_rules! bytemuck_instruction {
     ($discriminator_name:ident, $struct_name:ident) => {
         $crate::impl_instruction_from_bytes!($struct_name);
 
@@ -185,6 +161,40 @@ macro_rules! instruction {
                 [
                     [$discriminator_name::$struct_name as u8].to_vec(),
                     bytemuck::bytes_of(self).to_vec(),
+                ]
+                .concat()
+            }
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! borsh_instruction {
+    ($discriminator_name:ident, $struct_name:ident) => {
+        impl $crate::Discriminator for $struct_name {
+            fn discriminator() -> u8 {
+                $discriminator_name::$struct_name as u8
+            }
+        }
+
+        // TODO: Vectors are horrible in SVM land :(
+        impl $struct_name
+        where
+            Self: borsh::BorshSerialize,
+            Self: borsh::BorshDeserialize,
+        {
+            pub fn try_from_bytes(
+                data: &[u8],
+            ) -> Result<Self, pinocchio::program_error::ProgramError> {
+                <Self>::try_from_slice(data).or(Err(
+                    pinocchio::program_error::ProgramError::InvalidInstructionData,
+                ))
+            }
+
+            pub fn to_bytes(&self) -> Vec<u8> {
+                [
+                    [$discriminator_name::$struct_name as u8].to_vec(),
+                    borsh::to_vec(self).unwrap(),
                 ]
                 .concat()
             }

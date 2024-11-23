@@ -1,5 +1,5 @@
 [package]
-name = "steel"
+name = "geppetto"
 description = "Solana smart contract framework"
 version.workspace = true
 edition.workspace = true
@@ -12,13 +12,19 @@ keywords.workspace = true
 
 [features]
 deafult = []
-spl = ["spl-token", "spl-associated-token-account"]
+# spl = ["spl-token", "spl-associated-token-account"]
 
 [dependencies]
+pinocchio = "=0.6.0"
+pinocchio-pubkey = "=0.2.1"
+pinocchio-token = "0.2.0"
+pinocchio-system = "0.2.0"
+borsh = "=0.10.3"
+
 bytemuck.workspace = true
 num_enum.workspace = true
-solana-program.workspace = true
-spl-token = { workspace = true, optional = true }
-spl-associated-token-account = { workspace = true, optional = true }
+# solana-program.workspace = true
+# spl-token = { workspace = true, optional = true }
+# spl-associated-token-account = { workspace = true, optional = true }
 thiserror.workspace = true
 

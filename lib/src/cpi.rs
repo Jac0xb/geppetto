@@ -1,19 +1,23 @@
 use bytemuck::Pod;
-use solana_program::{
-    account_info::AccountInfo, entrypoint::ProgramResult, instruction::Instruction, pubkey::Pubkey,
-    rent::Rent, sysvar::Sysvar,
+use pinocchio::{
+    account_info::AccountInfo,
+    instruction::{Instruction, Seed, Signer},
+    pubkey::{find_program_address, Pubkey},
+    sysvars::{rent::Rent, Sysvar},
+    ProgramResult,
 };
+use pinocchio_system::instructions::{Allocate, Assign, CreateAccount, Transfer};
 
 use crate::Discriminator;
 
 /// Creates a new program account.
 #[inline(always)]
 pub fn create_account<'a, 'info, T: Discriminator + Pod>(
-    target_account: &'a AccountInfo<'info>,
-    system_program: &'a AccountInfo<'info>,
-    payer: &'a AccountInfo<'info>,
+    target_account: &'a AccountInfo,
+    system_program: &'a AccountInfo,
+    payer: &'a AccountInfo,
     owner: &Pubkey,
-    seeds: &[&[u8]],
+    seeds: &[Seed],
 ) -> ProgramResult {
     create_account_with_bump::<T>(
         target_account,
@@ -21,18 +25,26 @@ pub fn create_account<'a, 'info, T: Discriminator + Pod>(
         payer,
         owner,
         seeds,
-        Pubkey::find_program_address(seeds, owner).1,
+        find_program_address(
+            seeds
+                .iter()
+                .map(|s| s.as_ref())
+                .collect::<Vec<_>>()
+                .as_slice(),
+            owner,
+        )
+        .1,
     )
 }
 
 /// Creates a new program account with user-provided bump.
 #[inline(always)]
 pub fn create_account_with_bump<'a, 'info, T: Discriminator + Pod>(
-    target_account: &'a AccountInfo<'info>,
-    system_program: &'a AccountInfo<'info>,
-    payer: &'a AccountInfo<'info>,
+    target_account: &'a AccountInfo,
+    system_program: &'a AccountInfo,
+    payer: &'a AccountInfo,
     owner: &Pubkey,
-    seeds: &[&[u8]],
+    seeds: &[Seed],
     bump: u8,
 ) -> ProgramResult {
     // Allocate space.
@@ -47,7 +59,7 @@ pub fn create_account_with_bump<'a, 'info, T: Discriminator + Pod>(
     )?;
 
     // Set discriminator.
-    let mut data = target_account.data.borrow_mut();
+    let mut data = target_account.try_borrow_mut_data()?;
     data[0] = T::discriminator();
 
     Ok(())
@@ -56,12 +68,12 @@ pub fn create_account_with_bump<'a, 'info, T: Discriminator + Pod>(
 /// Allocates space for a new program account.
 #[inline(always)]
 pub fn allocate_account<'a, 'info>(
-    target_account: &'a AccountInfo<'info>,
-    system_program: &'a AccountInfo<'info>,
-    payer: &'a AccountInfo<'info>,
+    target_account: &'a AccountInfo,
+    system_program: &'a AccountInfo,
+    payer: &'a AccountInfo,
     space: usize,
     owner: &Pubkey,
-    seeds: &[&[u8]],
+    seeds: &[Seed],
 ) -> ProgramResult {
     allocate_account_with_bump(
         target_account,
@@ -70,47 +82,68 @@ pub fn allocate_account<'a, 'info>(
         space,
         owner,
         seeds,
-        Pubkey::find_program_address(seeds, owner).1,
+        find_program_address(
+            seeds
+                .iter()
+                .map(|s| s.as_ref())
+                .collect::<Vec<_>>()
+                .as_slice(),
+            owner,
+        )
+        .1,
     )
 }
 
 /// Allocates space for a new program account with user-provided bump.
 #[inline(always)]
 pub fn allocate_account_with_bump<'a, 'info>(
-    target_account: &'a AccountInfo<'info>,
-    system_program: &'a AccountInfo<'info>,
-    payer: &'a AccountInfo<'info>,
+    target_account: &'a AccountInfo,
+    system_program: &'a AccountInfo,
+    payer: &'a AccountInfo,
     space: usize,
     owner: &Pubkey,
-    seeds: &[&[u8]],
+    seeds: &[Seed],
     bump: u8,
 ) -> ProgramResult {
     // Combine seeds
-    let bump: &[u8] = &[bump];
+    // let bump: Seed = Seed::from(&[bump]);
+    let bump_slice = &[bump];
     let mut combined_seeds = Vec::with_capacity(seeds.len() + 1);
     combined_seeds.extend_from_slice(seeds);
-    combined_seeds.push(bump);
+    combined_seeds.push(Seed::from(bump_slice));
     let seeds = combined_seeds.as_slice();
+    let signer = Signer::from(seeds);
+
+    let signers = &[signer];
 
     // Allocate space for account
     let rent = Rent::get()?;
     if target_account.lamports().eq(&0) {
         // If balance is zero, create account
-        solana_program::program::invoke_signed(
-            &solana_program::system_instruction::create_account(
-                payer.key,
-                target_account.key,
-                rent.minimum_balance(space),
-                space as u64,
-                owner,
-            ),
-            &[
-                payer.clone(),
-                target_account.clone(),
-                system_program.clone(),
-            ],
-            &[seeds],
-        )?;
+        // invoke_signed(
+        //     &solana_program::system_instruction::create_account(
+        //         payer.key,
+        //         target_account.key,
+        //         rent.minimum_balance(space),
+        //         space as u64,
+        //         owner,
+        //     ),
+        //     &[
+        //         payer.clone(),
+        //         target_account.clone(),
+        //         system_program.clone(),
+        //     ],
+        //     &[seeds],
+        // )?;
+
+        CreateAccount {
+            from: payer,
+            to: target_account,
+            lamports: rent.minimum_balance(space),
+            space: space as u64,
+            owner,
+        }
+        .invoke_signed(signers)?;
     } else {
         // Otherwise, if balance is nonzero:
 
@@ -119,33 +152,52 @@ pub fn allocate_account_with_bump<'a, 'info>(
             .minimum_balance(space)
             .saturating_sub(target_account.lamports());
         if rent_exempt_balance.gt(&0) {
-            solana_program::program::invoke(
-                &solana_program::system_instruction::transfer(
-                    payer.key,
-                    target_account.key,
-                    rent_exempt_balance,
-                ),
-                &[
-                    payer.clone(),
-                    target_account.clone(),
-                    system_program.clone(),
-                ],
-            )?;
+            // solana_program::program::invoke(
+            //     &solana_program::system_instruction::transfer(
+            //         payer.key,
+            //         target_account.key,
+            //         rent_exempt_balance,
+            //     ),
+            //     &[
+            //         payer.clone(),
+            //         target_account.clone(),
+            //         system_program.clone(),
+            //     ],
+            // )?;
+
+            Transfer {
+                from: payer,
+                to: target_account,
+                lamports: rent_exempt_balance,
+            }
+            .invoke_signed(signers)?;
         }
 
         // 2) allocate space for the account
-        solana_program::program::invoke_signed(
-            &solana_program::system_instruction::allocate(target_account.key, space as u64),
-            &[target_account.clone(), system_program.clone()],
-            &[seeds],
-        )?;
+        // solana_program::program::invoke_signed(
+        //     &solana_program::system_instruction::allocate(target_account.key, space as u64),
+        //     &[target_account.clone(), system_program.clone()],
+        //     &[seeds],
+        // )?;
+
+        Allocate {
+            account: target_account,
+            space: space as u64,
+        }
+        .invoke_signed(signers)?;
 
         // 3) assign our program as the owner
-        solana_program::program::invoke_signed(
-            &solana_program::system_instruction::assign(target_account.key, owner),
-            &[target_account.clone(), system_program.clone()],
-            &[seeds],
-        )?;
+        // solana_program::program::invoke_signed(
+        //     &solana_program::system_instruction::assign(target_account.key, owner),
+        //     &[target_account.clone(), system_program.clone()],
+        //     &[seeds],
+        // )?;
+
+        Assign {
+            account: target_account,
+            owner,
+        }
+        .invoke_signed(signers)?;
     }
 
     Ok(())
@@ -153,49 +205,56 @@ pub fn allocate_account_with_bump<'a, 'info>(
 
 /// Closes an account and returns the remaining rent lamports to the provided recipient.
 #[inline(always)]
-pub fn close_account<'info>(
-    account_info: &AccountInfo<'info>,
-    recipient: &AccountInfo<'info>,
-) -> ProgramResult {
+pub fn close_account<'info>(account_info: &AccountInfo, recipient: &AccountInfo) -> ProgramResult {
     // Realloc data to zero.
     account_info.realloc(0, true)?;
 
     // Return rent lamports.
-    **recipient.lamports.borrow_mut() += account_info.lamports();
-    **account_info.lamports.borrow_mut() = 0;
+    *recipient.try_borrow_mut_lamports()? += account_info.lamports();
+    *account_info.try_borrow_mut_lamports()? = 0;
 
     Ok(())
 }
 
 /// Invokes a CPI with provided signer seeds and program id.
 #[inline(always)]
-pub fn invoke_signed<'info>(
+pub fn invoke_signed<'info, const ACCOUNTS: usize>(
     instruction: &Instruction,
-    account_infos: &[AccountInfo<'info>],
+    account_infos: &[&AccountInfo; ACCOUNTS],
     program_id: &Pubkey,
-    seeds: &[&[u8]],
+    seeds: &[Seed],
 ) -> ProgramResult {
-    let bump = Pubkey::find_program_address(seeds, program_id).1;
+    let bump = find_program_address(
+        seeds
+            .iter()
+            .map(|s| s.as_ref())
+            .collect::<Vec<_>>()
+            .as_slice(),
+        program_id,
+    )
+    .1;
     invoke_signed_with_bump(instruction, account_infos, seeds, bump)
 }
 
 /// Invokes a CPI with the provided signer seeds and bump.
 #[inline(always)]
-pub fn invoke_signed_with_bump<'info>(
+pub fn invoke_signed_with_bump<'info, const ACCOUNTS: usize>(
     instruction: &Instruction,
-    account_infos: &[AccountInfo<'info>],
-    seeds: &[&[u8]],
+    account_infos: &[&AccountInfo; ACCOUNTS],
+    seeds: &[Seed],
     bump: u8,
 ) -> ProgramResult {
     // Combine seeds
-    let bump: &[u8] = &[bump];
+    let bump_slice = &[bump];
     let mut combined_seeds = Vec::with_capacity(seeds.len() + 1);
     combined_seeds.extend_from_slice(seeds);
-    combined_seeds.push(bump);
+    combined_seeds.push(Seed::from(bump_slice));
     let seeds = combined_seeds.as_slice();
 
+    let signers = &[Signer::from(seeds)];
+
     // Invoke CPI
-    solana_program::program::invoke_signed(instruction, account_infos, &[seeds])
+    pinocchio::program::invoke_signed::<ACCOUNTS>(instruction, account_infos, signers)
 }
 
 #[cfg(feature = "spl")]
