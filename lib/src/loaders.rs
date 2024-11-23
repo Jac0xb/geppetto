@@ -45,7 +45,7 @@ impl AccountInfoValidation for AccountInfo {
     }
 
     fn assert_program(&self, program_id: &Pubkey) -> Result<&Self, ProgramError> {
-        self.assert_address(program_id)?.assert_executable()
+        self.assert_key(program_id)?.assert_executable()
     }
 
     fn assert_type<T: Discriminator>(&self, program_id: &Pubkey) -> Result<&Self, ProgramError> {
@@ -63,7 +63,7 @@ impl AccountInfoValidation for AccountInfo {
         Ok(self)
     }
 
-    fn assert_address(&self, address: &Pubkey) -> Result<&Self, ProgramError> {
+    fn assert_key(&self, address: &Pubkey) -> Result<&Self, ProgramError> {
         if self.key().ne(address) {
             return Err(ProgramError::InvalidAccountData);
         }

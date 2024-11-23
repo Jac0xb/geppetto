@@ -100,7 +100,7 @@ pub trait AccountInfoValidation {
     fn assert_type<T: Discriminator>(&self, program_id: &Pubkey) -> Result<&Self, ProgramError>;
     fn assert_program(&self, program_id: &Pubkey) -> Result<&Self, ProgramError>;
     // fn is_sysvar(&self, sysvar_id: &Pubkey) -> Result<&Self, ProgramError>;
-    fn assert_address(&self, address: &Pubkey) -> Result<&Self, ProgramError>;
+    fn assert_key(&self, address: &Pubkey) -> Result<&Self, ProgramError>;
     fn assert_owner(&self, program_id: &Pubkey) -> Result<&Self, ProgramError>;
     fn assert_seeds(&self, seeds: &[&[u8]], program_id: &Pubkey) -> Result<&Self, ProgramError>;
 }
