@@ -1,23 +1,26 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use bytemuck::Pod;
 use pinocchio::{
     account_info::AccountInfo,
+    msg,
     program_error::ProgramError,
-    pubkey::{find_program_address, Pubkey},
+    pubkey::{self, find_program_address, Pubkey},
+    syscalls::sol_log_pubkey,
 };
 use pinocchio_system::instructions::Transfer;
 #[cfg(feature = "spl")]
 use solana_program::program_pack::Pack;
 
-use crate::{
-    AccountDeserialize, AccountInfoValidation, AsAccount, CloseAccount, Discriminator,
-    LamportTransfer,
-};
+use crate::{AccountInfoValidation, AsAccount, CloseAccount, Discriminator, LamportTransfer};
+
 #[cfg(feature = "spl")]
 use crate::{AccountValidation, AsSplToken};
 
 impl AccountInfoValidation for AccountInfo {
     fn assert_signer(&self) -> Result<&Self, ProgramError> {
         if !self.is_signer() {
+            msg!("Account is not a signer:");
+            pubkey::log(self.key());
             return Err(ProgramError::MissingRequiredSignature);
         }
         Ok(self)
@@ -25,6 +28,8 @@ impl AccountInfoValidation for AccountInfo {
 
     fn assert_writable(&self) -> Result<&Self, ProgramError> {
         if !self.is_writable() {
+            msg!("Account is not writable:");
+            pubkey::log(self.key());
             return Err(ProgramError::MissingRequiredSignature);
         }
         Ok(self)
@@ -32,6 +37,8 @@ impl AccountInfoValidation for AccountInfo {
 
     fn assert_executable(&self) -> Result<&Self, ProgramError> {
         if !self.executable() {
+            msg!("Account is not executable:");
+            pubkey::log(self.key());
             return Err(ProgramError::InvalidAccountData);
         }
         Ok(self)
@@ -39,6 +46,8 @@ impl AccountInfoValidation for AccountInfo {
 
     fn assert_empty(&self) -> Result<&Self, ProgramError> {
         if !self.data_is_empty() {
+            msg!("Account is not empty:");
+            pubkey::log(self.key());
             return Err(ProgramError::AccountAlreadyInitialized);
         }
         Ok(self)
@@ -46,6 +55,8 @@ impl AccountInfoValidation for AccountInfo {
 
     fn assert_not_empty(&self) -> Result<&Self, ProgramError> {
         if self.data_is_empty() {
+            msg!("Account is empty:");
+            pubkey::log(self.key());
             return Err(ProgramError::AccountAlreadyInitialized);
         }
         Ok(self)
@@ -57,7 +68,17 @@ impl AccountInfoValidation for AccountInfo {
 
     fn assert_type<T: Discriminator>(&self, program_id: &Pubkey) -> Result<&Self, ProgramError> {
         self.assert_owner(program_id)?;
-        if self.try_borrow_data()?[0].ne(&T::discriminator()) {
+
+        let expected_discriminator = T::discriminator();
+        let actual_discriminator = self.try_borrow_data()?[0];
+
+        if actual_discriminator.ne(&expected_discriminator) {
+            msg!(
+                "Account is invalid type (expected, actual): {:?}, {:?}",
+                expected_discriminator,
+                actual_discriminator
+            );
+            pubkey::log(self.key());
             return Err(ProgramError::InvalidAccountData);
         }
         Ok(self)
@@ -65,6 +86,9 @@ impl AccountInfoValidation for AccountInfo {
 
     fn assert_owner(&self, owner: &Pubkey) -> Result<&Self, ProgramError> {
         if self.owner().ne(owner) {
+            msg!("Account owner mismatch (expected, actual):");
+            pubkey::log(owner);
+            pubkey::log(self.owner());
             return Err(ProgramError::InvalidAccountOwner);
         }
         Ok(self)
@@ -72,6 +96,9 @@ impl AccountInfoValidation for AccountInfo {
 
     fn assert_key(&self, address: &Pubkey) -> Result<&Self, ProgramError> {
         if self.key().ne(address) {
+            msg!("Account key mismatch:");
+            pubkey::log(self.key());
+            pubkey::log(address);
             return Err(ProgramError::InvalidAccountData);
         }
         Ok(self)
@@ -80,6 +107,9 @@ impl AccountInfoValidation for AccountInfo {
     fn assert_seeds(&self, seeds: &[&[u8]], program_id: &Pubkey) -> Result<&Self, ProgramError> {
         let pda = find_program_address(seeds, program_id);
         if self.key().ne(&pda.0) {
+            msg!("Account is invalid seeds (expected, actual):");
+            pubkey::log(&pda.0);
+            pubkey::log(self.key());
             return Err(ProgramError::InvalidSeeds);
         }
         Ok(self)
@@ -92,31 +122,44 @@ impl AccountInfoValidation for AccountInfo {
 }
 
 impl AsAccount for AccountInfo {
-    fn as_account<T>(&self, program_id: &Pubkey) -> Result<&T, ProgramError>
+    fn as_account<T>(&self, program_id: &Pubkey) -> Result<T, ProgramError>
     where
-        T: AccountDeserialize + Discriminator + Pod,
+        T: BorshDeserialize + BorshSerialize + Discriminator,
     {
-        unsafe {
-            self.assert_owner(program_id)?;
-            T::try_from_bytes(std::slice::from_raw_parts(
-                self.try_borrow_data()?.as_ptr(),
-                8 + std::mem::size_of::<T>(),
-            ))
-        }
+        self.assert_owner(program_id)?;
+        T::try_from_slice(&self.try_borrow_data()?[1..])
+            .map_err(|_| ProgramError::InvalidAccountData)
     }
 
-    fn as_account_mut<T>(&self, program_id: &Pubkey) -> Result<&mut T, ProgramError>
+    fn save_account<T>(&self, program_id: &Pubkey, account: &T) -> Result<(), ProgramError>
     where
-        T: AccountDeserialize + Discriminator + Pod,
+        T: BorshDeserialize + BorshSerialize + Discriminator,
     {
-        unsafe {
-            self.assert_owner(program_id)?;
-            T::try_from_bytes_mut(std::slice::from_raw_parts_mut(
-                self.try_borrow_mut_data()?.as_mut_ptr(),
-                8 + std::mem::size_of::<T>(),
-            ))
-        }
+        self.assert_owner(program_id)?.assert_writable()?;
+
+        let mut data = self.try_borrow_mut_data()?;
+        data[0] = T::discriminator();
+
+        data[1..].copy_from_slice(
+            &account
+                .try_to_vec()
+                .map_err(|_| ProgramError::InvalidAccountData)?,
+        );
+        Ok(())
     }
+
+    // fn as_account_mut<T>(&self, program_id: &Pubkey) -> Result<&mut T, ProgramError>
+    // where
+    //     T: BorshDeserialize + BorshSerialize + Discriminator,
+    // {
+    //     unsafe {
+    //         self.assert_owner(program_id)?;
+    //         T::try_from_bytes_mut(std::slice::from_raw_parts_mut(
+    //             self.try_borrow_mut_data()?.as_mut_ptr(),
+    //             8 + std::mem::size_of::<T>(),
+    //         ))
+    //     }
+    // }
 }
 
 impl<'a> LamportTransfer<'a> for AccountInfo {

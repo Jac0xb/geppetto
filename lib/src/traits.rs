@@ -1,30 +1,31 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use bytemuck::Pod;
 use pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey};
 
-pub trait AccountDeserialize {
-    fn try_from_bytes(data: &[u8]) -> Result<&Self, ProgramError>;
-    fn try_from_bytes_mut(data: &mut [u8]) -> Result<&mut Self, ProgramError>;
-}
+// pub trait AccountDeserialize {
+//     fn try_from_bytes(data: &[u8]) -> Result<&Self, ProgramError>;
+//     fn try_from_bytes_mut(data: &mut [u8]) -> Result<&mut Self, ProgramError>;
+// }
 
-impl<T> AccountDeserialize for T
-where
-    T: Discriminator + Pod,
-{
-    fn try_from_bytes(data: &[u8]) -> Result<&Self, ProgramError> {
-        if Self::discriminator().ne(&data[0]) {
-            return Err(ProgramError::InvalidAccountData);
-        }
-        bytemuck::try_from_bytes::<Self>(&data[8..]).or(Err(ProgramError::InvalidAccountData))
-    }
+// impl<T> AccountDeserialize for T
+// where
+//     T: Discriminator + Pod,
+// {
+//     fn try_from_bytes(data: &[u8]) -> Result<&Self, ProgramError> {
+//         if Self::discriminator().ne(&data[0]) {
+//             return Err(ProgramError::InvalidAccountData);
+//         }
+//         bytemuck::try_from_bytes::<Self>(&data[8..]).or(Err(ProgramError::InvalidAccountData))
+//     }
 
-    fn try_from_bytes_mut(data: &mut [u8]) -> Result<&mut Self, ProgramError> {
-        if Self::discriminator().ne(&data[0]) {
-            return Err(ProgramError::InvalidAccountData);
-        }
-        bytemuck::try_from_bytes_mut::<Self>(&mut data[8..])
-            .or(Err(ProgramError::InvalidAccountData))
-    }
-}
+//     fn try_from_bytes_mut(data: &mut [u8]) -> Result<&mut Self, ProgramError> {
+//         if Self::discriminator().ne(&data[0]) {
+//             return Err(ProgramError::InvalidAccountData);
+//         }
+//         bytemuck::try_from_bytes_mut::<Self>(&mut data[8..])
+//             .or(Err(ProgramError::InvalidAccountData))
+//     }
+// }
 
 /// Account data is sometimes stored via a header and body type,
 /// where the former resolves the type of the latter (e.g. merkle trees with a generic size const).
@@ -115,13 +116,17 @@ pub trait Discriminator {
 /// 2. Discriminator byte check
 /// 3. Checked bytemuck conversion of account data to &T or &mut T.
 pub trait AsAccount {
-    fn as_account<T>(&self, program_id: &Pubkey) -> Result<&T, ProgramError>
+    fn as_account<T>(&self, program_id: &Pubkey) -> Result<T, ProgramError>
     where
-        T: AccountDeserialize + Discriminator + Pod;
+        T: BorshDeserialize + BorshSerialize + Discriminator;
 
-    fn as_account_mut<T>(&self, program_id: &Pubkey) -> Result<&mut T, ProgramError>
+    fn save_account<T>(&self, program_id: &Pubkey, account: &T) -> Result<(), ProgramError>
     where
-        T: AccountDeserialize + Discriminator + Pod;
+        T: BorshDeserialize + BorshSerialize + Discriminator;
+
+    // fn as_account_mut<T>(&self, program_id: &Pubkey) -> Result<&mut T, ProgramError>
+    // where
+    //     T: BorshDeserialize + BorshSerialize + Discriminator;
 }
 
 #[cfg(feature = "spl")]
