@@ -152,9 +152,9 @@ impl AsAccount for AccountInfo {
         Ok(())
     }
 
+    // TODO: Program_id is the same as owner DUH
     fn create_account<T>(
         &self,
-        program_id: &Pubkey,
         data: &T,
         system_program: &AccountInfo,
         payer: &AccountInfo,
@@ -165,7 +165,7 @@ impl AsAccount for AccountInfo {
         T: BorshDeserialize + BorshSerialize + Discriminator,
     {
         self.assert_empty()?
-            .assert_owner(program_id)?
+            .assert_owner(system_program.key())?
             .assert_writable()?;
 
         let serialized_data = data

@@ -128,7 +128,6 @@ pub trait AsAccount {
 
     fn create_account<T>(
         &self,
-        program_id: &Pubkey,
         data: &T,
         system_program: &AccountInfo,
         payer: &AccountInfo,
