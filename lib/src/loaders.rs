@@ -1,6 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use pinocchio::{
     account_info::AccountInfo,
+    instruction::Seed,
     msg,
     program_error::ProgramError,
     pubkey::{self, find_program_address, Pubkey},
@@ -9,7 +10,10 @@ use pinocchio_system::instructions::Transfer;
 #[cfg(feature = "spl")]
 use solana_program::program_pack::Pack;
 
-use crate::{AccountInfoValidation, AsAccount, CloseAccount, Discriminator, LamportTransfer};
+use crate::{
+    allocate_account, AccountInfoValidation, AsAccount, CloseAccount, Discriminator,
+    LamportTransfer,
+};
 
 #[cfg(feature = "spl")]
 use crate::{AccountValidation, AsSplToken};
@@ -129,20 +133,54 @@ impl AsAccount for AccountInfo {
             .map_err(|_| ProgramError::InvalidAccountData)
     }
 
-    fn save_account<T>(&self, program_id: &Pubkey, account: &T) -> Result<(), ProgramError>
+    fn save_account<T>(&self, program_id: &Pubkey, data: &T) -> Result<(), ProgramError>
     where
         T: BorshDeserialize + BorshSerialize + Discriminator,
     {
         self.assert_owner(program_id)?.assert_writable()?;
 
-        let mut data = self.try_borrow_mut_data()?;
-        data[0] = T::discriminator();
+        let mut account_data_ref = self.try_borrow_mut_data()?;
+        account_data_ref[0] = T::discriminator();
 
-        data[1..].copy_from_slice(
-            &account
+        // TODO: Need to resize account data if it's not enough.
+
+        account_data_ref[1..].copy_from_slice(
+            &data
                 .try_to_vec()
                 .map_err(|_| ProgramError::InvalidAccountData)?,
         );
+        Ok(())
+    }
+
+    fn create_account<T>(
+        &self,
+        program_id: &Pubkey,
+        data: &T,
+        system_program: &AccountInfo,
+        payer: &AccountInfo,
+        owner: &Pubkey,
+        seeds: &[Seed],
+    ) -> Result<(), ProgramError>
+    where
+        T: BorshDeserialize + BorshSerialize + Discriminator,
+    {
+        self.assert_empty()?
+            .assert_owner(program_id)?
+            .assert_writable()?;
+
+        let serialized_data = data
+            .try_to_vec()
+            .map_err(|_| ProgramError::InvalidAccountData)?;
+
+        let space = 1 + serialized_data.len();
+
+        allocate_account(self, system_program, payer, space, owner, seeds)?;
+
+        let mut data = self.try_borrow_mut_data()?;
+        data[0] = T::discriminator();
+
+        data[1..].copy_from_slice(&serialized_data);
+
         Ok(())
     }
 

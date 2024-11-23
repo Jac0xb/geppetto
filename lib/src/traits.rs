@@ -1,6 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytemuck::Pod;
-use pinocchio::{account_info::AccountInfo, program_error::ProgramError, pubkey::Pubkey};
+use pinocchio::{
+    account_info::AccountInfo, instruction::Seed, program_error::ProgramError, pubkey::Pubkey,
+};
 
 // pub trait AccountDeserialize {
 //     fn try_from_bytes(data: &[u8]) -> Result<&Self, ProgramError>;
@@ -121,6 +123,18 @@ pub trait AsAccount {
         T: BorshDeserialize + BorshSerialize + Discriminator;
 
     fn save_account<T>(&self, program_id: &Pubkey, account: &T) -> Result<(), ProgramError>
+    where
+        T: BorshDeserialize + BorshSerialize + Discriminator;
+
+    fn create_account<T>(
+        &self,
+        program_id: &Pubkey,
+        data: &T,
+        system_program: &AccountInfo,
+        payer: &AccountInfo,
+        owner: &Pubkey,
+        seeds: &[Seed],
+    ) -> Result<(), ProgramError>
     where
         T: BorshDeserialize + BorshSerialize + Discriminator;
 
