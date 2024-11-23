@@ -5,7 +5,7 @@
   <img width="400" alt="Limestone" src="https://github.com/user-attachments/assets/ad252ff4-cbad-40d4-967d-31f07fc5b893" />
 </p>
 <p align="center">
-  Create steel-esq Solana programs with one dependency attached <a href="https://github.com/febo/pinocchio">pinocchio</a>.
+  Create steel-esq Solana programs with one dependency attached (<a href="https://github.com/febo/pinocchio">pinocchio</a>).
 </p>
 
 <p align="right">
